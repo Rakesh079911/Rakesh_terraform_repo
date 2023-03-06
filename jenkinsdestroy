@@ -1,0 +1,60 @@
+pipeline {
+
+  agent any
+
+  environment {
+    SVC_ACCOUNT_KEY = credentials('terraform-auth')
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+        checkout scm
+        sh 'mkdir -p creds' 
+        sh 'echo $SVC_ACCOUNT_KEY | base64 -d > ./creds/serviceaccount.json'
+      }
+    }
+
+    stage('TF init') {
+      steps {
+        container('terraform') {
+          sh 'terraform init'
+          sh 'echo "Followig Infrastructure will be destroyed once you confirm"'
+          sh 'terraform state list'
+          sh 'echo "complete Terraform state is below"'
+          sh 'terraform show'
+        }
+      }      
+    }
+
+     
+    stage('Approval') {
+      steps {
+        script {
+          def userInput = input(id: 'confirm', message: 'Apply Terraform destroy?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Apply terraform', name: 'confirm'] ])
+        }
+      }
+    }
+    stage('TF destroy') {
+      steps {
+        container('terraform') {
+          sh 'terraform destroy --auto-approve'
+          
+        }
+      }      
+    }
+
+    
+      stage('Confirmation')  {
+        steps {
+         contanier('terraform')  {
+           sh 'echo "Resources have been destroyed"'
+           sh 'terrraform show'
+          }
+        }
+      }
+   
+  } 
+
+}
